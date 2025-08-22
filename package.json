@@ -11,12 +11,7 @@
     "export": "next build && next export"
   },
   "dependencies": {
-    "@google-cloud/translate": "^9.2.0",
-    "@types/multer": "^2.0.0",
-    "docx-preview": "^0.3.6",
     "lucide-react": "^0.540.0",
-    "mammoth": "^1.10.0",
-    "multer": "^2.0.2",
     "next": "15.5.0",
     "react": "19.1.0",
     "react-dom": "19.1.0",
