@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "design-system-extractor": {
+      "command": "node",
+      "args": ["mcp-design-system-extractor/dist/index.js"],
+      "env": {
+        "STORYBOOK_URL": "https://design-system.smartcat.com"
+      }
+    }
+  }
+}
