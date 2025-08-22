@@ -6,12 +6,6 @@ const nextConfig: NextConfig = {
   trailingSlash: true,
   images: {
     unoptimized: true
-  },
-  // Prevent workspace root confusion
-  experimental: {
-    turbopack: {
-      root: "/Users/benserota/Documents/Code Projects/iterative_translator"
-    }
   }
 };
 

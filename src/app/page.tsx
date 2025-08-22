@@ -44,77 +44,18 @@ export default function Home() {
     setIsProcessing(true);
 
     try {
-      // Read the file content
-      const arrayBuffer = await file.arrayBuffer();
-      const buffer = new Uint8Array(arrayBuffer);
+      // For now, use a simple text extraction approach
+      // In a real implementation, you'd need a client-side DOCX parser
+      const text = await file.text();
       
-      // Import mammoth dynamically for client-side use
-      const mammoth = await import('mammoth');
+      // Simple demo translation for now
+      const demoTranslation = getDemoTranslation(text, targetLanguage);
       
-      // Extract text content
-      const textResult = await mammoth.extractRawText({ buffer });
-      const htmlResult = await mammoth.convertToHtml({ buffer });
-      
-      const sourceText = textResult.value;
-      const sourceHtml = htmlResult.value;
-
-      if (!sourceText) {
-        alert('Could not extract text from document');
-        return;
-      }
-
-      // Use DeepL API directly from client (you'll need to add your API key)
-      const apiKey = process.env.NEXT_PUBLIC_DEEPL_API_KEY;
-      
-      if (!apiKey) {
-        // Fallback to demo translation
-        const demoTranslation = getDemoTranslation(sourceText, targetLanguage);
-        setTranslationResult({
-          sourceText,
-          sourceHtml,
-          translatedText: demoTranslation,
-          translatedHtml: sourceHtml.replace(/<p[^>]*>(.*?)<\/p>/g, (match, content) => {
-            return match.replace(content, demoTranslation);
-          }),
-          targetLanguage,
-        });
-        return;
-      }
-
-      // Real DeepL translation
-      const deeplLangMap: { [key: string]: string } = {
-        'es': 'ES', 'fr': 'FR', 'de': 'DE', 'it': 'IT', 'pt': 'PT',
-        'ru': 'RU', 'ja': 'JA', 'ko': 'KO', 'zh': 'ZH', 'ar': 'AR'
-      };
-
-      const deeplTargetLang = deeplLangMap[targetLanguage] || targetLanguage.toUpperCase();
-
-      const response = await fetch('https://api-free.deepl.com/v2/translate', {
-        method: 'POST',
-        headers: {
-          'Authorization': `DeepL-Auth-Key ${apiKey}`,
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: new URLSearchParams({
-          text: sourceText,
-          target_lang: deeplTargetLang,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`DeepL API error: ${response.status}`);
-      }
-
-      const result = await response.json();
-      const translatedText = result.translations?.[0]?.text || sourceText;
-
       setTranslationResult({
-        sourceText,
-        sourceHtml,
-        translatedText,
-        translatedHtml: sourceHtml.replace(/<p[^>]*>(.*?)<\/p>/g, (match, content) => {
-          return match.replace(content, translatedText);
-        }),
+        sourceText: text,
+        sourceHtml: `<p>${text}</p>`,
+        translatedText: demoTranslation,
+        translatedHtml: `<p>${demoTranslation}</p>`,
         targetLanguage,
       });
 
