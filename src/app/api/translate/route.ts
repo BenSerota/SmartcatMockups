@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
   try {
     // Parse request body
     const body = await request.json();
-    const { message, language, fileContent, fileName, fileType } = body;
+    const { message, language, fileContent, fileName, fileType, hasUploadedFile } = body;
 
     // Validate required fields
     if (!message && !fileContent) {
@@ -38,7 +38,9 @@ export async function POST(request: NextRequest) {
       'ja': 'Japanese',
       'ko': 'Korean',
       'zh': 'Chinese',
-      'ar': 'Arabic'
+      'ar': 'Arabic',
+      'tr': 'Turkish',
+      'he': 'Hebrew'
     };
 
     const targetLanguage = languageNames[language] || language;
@@ -122,10 +124,19 @@ ${fileContent}
 
 Please provide a professional translation of the document content. Keep the response concise and focused on the translation task.`;
     } else {
-      // User questions - keep focused on file translation assistance
-      userMessage = `User Question: "${message}"
+      // User questions - check if file is already uploaded
+      if (hasUploadedFile) {
+        userMessage = `User Question: "${message}"
+
+**Context:** A file has already been uploaded and processed. The user is likely requesting a translation to a specific language.
+
+Please provide a brief, helpful response. If the user is specifying a target language, acknowledge that you understand and will proceed with the translation. Do NOT ask them to upload the file again.`;
+      } else {
+        // User questions - keep focused on file translation assistance
+        userMessage = `User Question: "${message}"
 
 Please provide a brief, helpful response focused on file translation assistance. If the user is asking about general translation or language questions, guide them toward uploading a file for translation.`;
+      }
     }
 
     // Call OpenAI API

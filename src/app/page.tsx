@@ -31,6 +31,7 @@ interface TranslationResult {
   translatedText: string;
   translatedHtml: string;
   targetLanguage: string;
+  detectedSourceLanguage?: string;
 }
 
 interface Message {
@@ -81,6 +82,10 @@ export default function Home() {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  useEffect(() => {
+    console.log('Translation result changed:', translationResult);
+  }, [translationResult]);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     console.log('onDrop called with files:', acceptedFiles);
@@ -161,30 +166,37 @@ export default function Home() {
     }
   };
 
-  const handleTranslate = async () => {
+  const handleTranslate = async (overrideLanguage?: string) => {
     if (!file) return;
+    
+    const languageToUse = overrideLanguage || targetLanguage;
 
     setIsProcessing(true);
     setIsTyping(true);
 
     // Add translation request message
     const languageNames: { [key: string]: string } = {
-      'es': 'Spanish',
-      'fr': 'French',
-      'de': 'German',
-      'it': 'Italian',
-      'pt': 'Portuguese',
-      'ru': 'Russian',
-      'ja': 'Japanese',
-      'ko': 'Korean',
-      'zh': 'Chinese',
-      'ar': 'Arabic'
+      'ES': 'Spanish',
+      'FR': 'French',
+      'DE': 'German',
+      'IT': 'Italian',
+      'PT': 'Portuguese',
+      'RU': 'Russian',
+      'JA': 'Japanese',
+      'KO': 'Korean',
+      'ZH': 'Chinese',
+      'AR': 'Arabic',
+      'TR': 'Turkish',
+      'HE': 'Hebrew'
     };
 
+    console.log('Creating translation request with targetLanguage:', languageToUse);
+    console.log('Available language names:', languageNames);
+    
     const translationRequestMessage: Message = {
       id: Date.now().toString(),
       type: 'user',
-      content: `Translate from English to ${languageNames[targetLanguage]}`,
+      content: `Translate to ${languageNames[languageToUse] || 'Unknown Language'}`,
       timestamp: new Date(),
       isTranslationRequest: true
     };
@@ -200,17 +212,21 @@ export default function Home() {
         return;
       }
 
-      // Step 2: Send to translation API
-      const response = await fetch('/api/translate', {
+      // Step 2: Send to DeepL translation API
+      console.log('Calling DeepL API with:', {
+        text: fileResult.content.substring(0, 100) + '...',
+        targetLanguage: languageToUse,
+        fullTextLength: fileResult.content.length
+      });
+      
+      const response = await fetch('/api/translate-deepl/', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          fileContent: fileResult.content,
-          fileName: fileResult.fileName,
-          fileType: fileResult.fileType,
-          language: targetLanguage
+          text: fileResult.content,
+          targetLanguage: languageToUse
         }),
       });
 
@@ -226,26 +242,45 @@ export default function Home() {
       }
 
       // Step 3: Format the results
-      setTranslationResult({
-        sourceText: fileResult.content,
-        sourceHtml: `<div style="white-space: pre-wrap; font-family: 'Inter', sans-serif; line-height: 1.6;">${fileResult.content}</div>`,
-        translatedText: data.translation,
-        translatedHtml: `<div style="white-space: pre-wrap; font-family: 'Inter', sans-serif; line-height: 1.6;">${data.translation}</div>`,
-        targetLanguage,
+      console.log('Translation data received:', data);
+      console.log('Setting translation result with:', {
+        sourceTextLength: fileResult.content.length,
+        translatedTextLength: data.translation.length,
+        sourcePreview: fileResult.content.substring(0, 50),
+        translatedPreview: data.translation.substring(0, 50),
+        targetLanguage: languageToUse,
+        detectedSourceLanguage: data.detectedSourceLanguage,
       });
+      
+      const newTranslationResult = {
+        sourceText: fileResult.content,
+        sourceHtml: `<div style="white-space: pre-wrap; font-family: 'Inter', sans-serif; line-height: 1.6; color: #111827;">${fileResult.content}</div>`,
+        translatedText: data.translation,
+        translatedHtml: `<div style="white-space: pre-wrap; font-family: 'Inter', sans-serif; line-height: 1.6; color: #111827;">${data.translation}</div>`,
+        targetLanguage: languageToUse,
+        detectedSourceLanguage: data.detectedSourceLanguage,
+      };
+      
+      console.log('Setting new translation result:', newTranslationResult);
+      console.log('Translation comparison:');
+      console.log('Source text (first 100 chars):', fileResult.content.substring(0, 100));
+      console.log('Translated text (first 100 chars):', data.translation.substring(0, 100));
+      console.log('Are they different?', fileResult.content !== data.translation);
+      setTranslationResult(newTranslationResult);
 
       // Add translation complete message
       const translationCompleteMessage: Message = {
         id: (Date.now() + 1).toString(),
         type: 'assistant',
-        content: `Translation complete! I've translated your document to ${languageNames[targetLanguage]}. You can view the side-by-side comparison on the right.`,
+        content: `Translation complete! I've translated your document to ${languageNames[languageToUse] || 'Unknown Language'}. You can view the side-by-side comparison on the right.`,
         timestamp: new Date()
       };
 
       setMessages(prev => [...prev, translationCompleteMessage]);
+      console.log('Setting showDocumentView to true');
       setShowDocumentView(true);
 
-      addNotification('success', 'Translation Complete', `Successfully translated to ${languageNames[targetLanguage]}`);
+      addNotification('success', 'Translation Complete', `Successfully translated to ${languageNames[languageToUse]}`);
 
     } catch (error) {
       console.error('Translation error:', error);
@@ -281,20 +316,25 @@ export default function Home() {
     setIsTyping(true);
 
     // Check if this is a translation request
-    const translationMatch = chatInput.toLowerCase().match(/translate.*to\s+(\w+)/);
+    const lowerInput = chatInput.toLowerCase().trim();
+    
+    // Check for "translate to [language]" pattern
+    const translationMatch = lowerInput.match(/translate.*to\s+(\w+)/);
     if (translationMatch && file) {
       const requestedLanguage = translationMatch[1];
       const languageMap: { [key: string]: string } = {
-        'spanish': 'es',
-        'french': 'fr',
-        'german': 'de',
-        'italian': 'it',
-        'portuguese': 'pt',
-        'russian': 'ru',
-        'japanese': 'ja',
-        'korean': 'ko',
-        'chinese': 'zh',
-        'arabic': 'ar'
+        'spanish': 'ES',
+        'french': 'FR',
+        'german': 'DE',
+        'italian': 'IT',
+        'portuguese': 'PT',
+        'russian': 'RU',
+        'japanese': 'JA',
+        'korean': 'KO',
+        'chinese': 'ZH',
+        'arabic': 'AR',
+        'turkish': 'TR',
+        'hebrew': 'HE'
       };
       
       const languageCode = languageMap[requestedLanguage];
@@ -304,6 +344,42 @@ export default function Home() {
         setTimeout(() => handleTranslate(), 100);
         return;
       }
+    }
+    
+    // Check for just language names (like "german", "spanish", etc.)
+    // Using DeepL language codes
+    const languageMap: { [key: string]: string } = {
+      'spanish': 'ES',
+      'french': 'FR',
+      'german': 'DE',
+      'italian': 'IT',
+      'portuguese': 'PT',
+      'russian': 'RU',
+      'japanese': 'JA',
+      'korean': 'KO',
+      'chinese': 'ZH',
+      'arabic': 'AR',
+      'turkish': 'TR',
+      'hebrew': 'HE'
+    };
+    
+    console.log('Checking language detection for:', lowerInput);
+    console.log('Available languages:', Object.keys(languageMap));
+    console.log('File exists:', !!file);
+    
+    const languageCode = languageMap[lowerInput];
+    console.log('Language code found:', languageCode);
+    
+    if (languageCode && file) {
+      console.log('Language detected:', lowerInput, '->', languageCode);
+      console.log('About to call handleTranslate...');
+      setTargetLanguage(languageCode);
+      // Trigger translation with the detected language code
+      setTimeout(() => {
+        console.log('Calling handleTranslate now with language:', languageCode);
+        handleTranslate(languageCode);
+      }, 100);
+      return;
     }
 
     try {
@@ -315,6 +391,9 @@ export default function Home() {
         body: JSON.stringify({
           message: chatInput,
           language: targetLanguage,
+          // Add context about uploaded file if available
+          hasUploadedFile: !!file,
+          fileName: file?.name,
         }),
       });
 
@@ -352,16 +431,18 @@ export default function Home() {
   };
 
   const languages = [
-    { code: 'es', name: 'Spanish' },
-    { code: 'fr', name: 'French' },
-    { code: 'de', name: 'German' },
-    { code: 'it', name: 'Italian' },
-    { code: 'pt', name: 'Portuguese' },
-    { code: 'ru', name: 'Russian' },
-    { code: 'ja', name: 'Japanese' },
-    { code: 'ko', name: 'Korean' },
-    { code: 'zh', name: 'Chinese' },
-    { code: 'ar', name: 'Arabic' },
+    { code: 'ES', name: 'Spanish' },
+    { code: 'FR', name: 'French' },
+    { code: 'DE', name: 'German' },
+    { code: 'IT', name: 'Italian' },
+    { code: 'PT', name: 'Portuguese' },
+    { code: 'RU', name: 'Russian' },
+    { code: 'JA', name: 'Japanese' },
+    { code: 'KO', name: 'Korean' },
+    { code: 'ZH', name: 'Chinese' },
+    { code: 'AR', name: 'Arabic' },
+    { code: 'TR', name: 'Turkish' },
+    { code: 'HE', name: 'Hebrew' },
   ];
 
   return (
@@ -460,6 +541,14 @@ export default function Home() {
                   </div>
                 )}
                 <p className="text-sm text-gray-500 mb-8">💡 Tip: You can drag and drop a Word document anywhere on this page, or click to select a file</p>
+                
+                {/* Quick Start Button */}
+                <button 
+                  onClick={() => setShowChatInterface(true)}
+                  className="mb-8 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                >
+                  Start Chat & Upload Documents
+                </button>
                 
                 {/* Main Input */}
                 <div className="mb-8">
@@ -662,7 +751,8 @@ export default function Home() {
                     value={chatInput}
                     onChange={(e) => setChatInput(e.target.value)}
                     placeholder="Ask me anything..."
-                    className="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-black placeholder-gray-500 font-medium"
+                    style={{ color: '#000000', backgroundColor: '#ffffff' }}
                     disabled={isTyping}
                   />
                   <button
@@ -671,6 +761,26 @@ export default function Home() {
                   >
                     <Mic className="w-5 h-5 text-gray-500" />
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => document.getElementById('file-upload')?.click()}
+                    className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                    title="Upload file"
+                  >
+                    <FileText className="w-5 h-5 text-gray-500" />
+                  </button>
+                  <input
+                    id="file-upload"
+                    type="file"
+                    accept=".docx,.doc"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        handleFileUpload(file);
+                      }
+                    }}
+                    className="hidden"
+                  />
                   <button
                     type="submit"
                     disabled={!chatInput.trim() || isTyping}
@@ -700,7 +810,11 @@ export default function Home() {
               <div className="p-6 border-b border-gray-200 flex items-center justify-between">
                 <div className="flex items-center space-x-4">
                   <div className="flex items-center space-x-2">
-                    <span className="text-sm font-medium text-gray-700">Original: English (USA)</span>
+                    <span className="text-sm font-medium text-gray-700">
+                      Original: {translationResult?.detectedSourceLanguage ? 
+                        `${translationResult.detectedSourceLanguage.toUpperCase()} (Auto-detected)` : 
+                        'Auto-detecting...'}
+                    </span>
                     <ChevronLeft className="w-4 h-4 text-gray-400" />
                   </div>
                   <div className="flex items-center space-x-2">
@@ -718,16 +832,40 @@ export default function Home() {
               <div className="flex-1 flex">
                 {/* Original Document */}
                 <div className="w-1/2 border-r border-gray-200 p-6 overflow-y-auto">
+                  <div className="mb-4 p-2 bg-yellow-100 text-xs text-gray-900 font-mono">
+                    <strong>Debug: translationResult exists: {translationResult ? 'YES' : 'NO'}</strong>
+                    {translationResult && (
+                      <div className="mt-1">
+                        <div>Source length: {translationResult.sourceText.length}</div>
+                        <div>Translated length: {translationResult.translatedText.length}</div>
+                      </div>
+                    )}
+                  </div>
                   <div 
-                    className="max-w-none"
+                    className="max-w-none text-gray-900 font-medium"
+                    style={{ color: '#111827' }}
                     dangerouslySetInnerHTML={{ __html: translationResult?.sourceHtml || '' }}
                   />
                 </div>
 
                 {/* Translated Document */}
                 <div className="w-1/2 p-6 overflow-y-auto">
+                  <div className="mb-4 p-2 bg-blue-100 text-xs text-gray-900 font-mono">
+                    <strong>Debug: Translated content preview:</strong>
+                    <div className="mt-1 break-words">
+                      {translationResult?.translatedText?.substring(0, 100) || 'NO CONTENT'}
+                    </div>
+                    <div className="mt-2 p-1 bg-white rounded">
+                      <strong>Translation Status:</strong>
+                      {translationResult?.sourceText === translationResult?.translatedText ? 
+                        <span className="text-red-600">❌ SAME TEXT (No translation)</span> : 
+                        <span className="text-green-600">✅ DIFFERENT TEXT (Translation worked)</span>
+                      }
+                    </div>
+                  </div>
                   <div 
-                    className="max-w-none"
+                    className="max-w-none text-gray-900 font-medium"
+                    style={{ color: '#111827' }}
                     dangerouslySetInnerHTML={{ __html: translationResult?.translatedHtml || '' }}
                   />
                 </div>

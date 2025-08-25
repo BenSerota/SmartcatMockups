@@ -13,6 +13,7 @@
     "build-storybook": "storybook build"
   },
   "dependencies": {
+    "deepl-node": "^1.19.0",
     "dotenv": "^17.2.1",
     "form-data": "^4.0.4",
     "lucide-react": "^0.540.0",
