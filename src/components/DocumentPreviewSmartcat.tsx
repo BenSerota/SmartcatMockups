@@ -48,26 +48,26 @@ export default function DocumentPreviewSmartcat({
   };
 
   return (
-    <div className={`bg-white border border-gray-200 rounded-lg overflow-hidden ${className}`}>
+    <div className={`bg-white/5 border border-white/20 rounded-lg overflow-hidden ${className}`}>
       {/* Header */}
-      <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
+      <div className="bg-white/10 px-4 py-3 border-b border-white/20">
         <div className="flex items-center justify-between">
           <div className="flex items-center">
-            <FileText className="h-4 w-4 text-gray-500 mr-2" />
-            <h3 className="text-sm font-medium text-gray-700">{title}</h3>
+            <FileText className="h-4 w-4 text-white/60 mr-2" />
+            <h3 className="text-sm font-medium text-white">{title}</h3>
           </div>
           {showActions && (
             <div className="flex items-center space-x-2">
               <button
                 onClick={handleCopy}
-                className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
+                className="p-1 text-white/60 hover:text-white transition-colors"
                 title="Copy content"
               >
                 <Copy className="h-4 w-4" />
               </button>
               <button
                 onClick={handleDownload}
-                className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
+                className="p-1 text-white/60 hover:text-white transition-colors"
                 title="Download as text"
               >
                 <Download className="h-4 w-4" />
@@ -85,7 +85,7 @@ export default function DocumentPreviewSmartcat({
           fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
           fontSize: '14px',
           lineHeight: '1.6',
-          color: '#374151',
+          color: 'rgba(255, 255, 255, 0.9)',
         }}
       />
     </div>
