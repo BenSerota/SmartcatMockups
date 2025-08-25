@@ -4,6 +4,7 @@ import { useState, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { Upload, FileText, Languages, ArrowRight, MessageSquare } from 'lucide-react';
 import DocumentPreview from '@/components/DocumentPreview';
+import { processFile } from '@/utils/fileProcessor';
 
 interface TranslationResult {
   sourceText: string;
@@ -13,12 +14,39 @@ interface TranslationResult {
   targetLanguage: string;
 }
 
+interface Message {
+  id: string;
+  type: 'user' | 'assistant';
+  content: string;
+  timestamp: Date;
+  isError?: boolean;
+}
+
+interface Notification {
+  id: string;
+  type: 'success' | 'error' | 'warning' | 'info';
+  title: string;
+  message: string;
+}
+
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [translationResult, setTranslationResult] = useState<TranslationResult | null>(null);
   const [targetLanguage, setTargetLanguage] = useState('es');
   const [showChat, setShowChat] = useState(false);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [chatInput, setChatInput] = useState('');
+  const [isTyping, setIsTyping] = useState(false);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+
+  const addNotification = (type: Notification['type'], title: string, message: string) => {
+    const id = Date.now().toString();
+    setNotifications(prev => [...prev, { id, type, title, message }]);
+    setTimeout(() => {
+      setNotifications(prev => prev.filter(n => n.id !== id));
+    }, 5000);
+  };
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const uploadedFile = acceptedFiles[0];
@@ -26,7 +54,7 @@ export default function Home() {
       setFile(uploadedFile);
       setTranslationResult(null);
     } else {
-      alert('Please upload a valid Word document (.docx)');
+      addNotification('error', 'Invalid File Type', 'Please upload a valid Word document (.docx)');
     }
   }, []);
 
@@ -44,46 +72,59 @@ export default function Home() {
     setIsProcessing(true);
 
     try {
-      // For now, use a simple text extraction approach
-      // In a real implementation, you'd need a client-side DOCX parser
-      const text = await file.text();
+      // Step 1: Process the file using the proper file processor
+      const fileResult = await processFile(file);
       
-      // Simple demo translation for now
-      const demoTranslation = getDemoTranslation(text, targetLanguage);
+      if (!fileResult.success) {
+        addNotification('error', 'File Processing Failed', fileResult.error || 'Unknown error');
+        return;
+      }
+
+      // Step 2: Send to translation API
+      const response = await fetch('/api/translate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          fileContent: fileResult.content,
+          fileName: fileResult.fileName,
+          fileType: fileResult.fileType,
+          language: targetLanguage
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown API error' }));
+        throw new Error(errorData.error || `API error: ${response.status}`);
+      }
+
+      const data = await response.json();
       
+      if (!data.success) {
+        throw new Error(data.error || 'Translation failed');
+      }
+
+      // Step 3: Format the results
       setTranslationResult({
-        sourceText: text,
-        sourceHtml: `<p>${text}</p>`,
-        translatedText: demoTranslation,
-        translatedHtml: `<p>${demoTranslation}</p>`,
+        sourceText: fileResult.content,
+        sourceHtml: `<div style="white-space: pre-wrap;">${fileResult.content}</div>`,
+        translatedText: data.translation,
+        translatedHtml: `<div style="white-space: pre-wrap;">${data.translation}</div>`,
         targetLanguage,
       });
 
+      addNotification('success', 'Translation Complete', `Successfully translated to ${languages.find(l => l.code === targetLanguage)?.name}`);
+
     } catch (error) {
       console.error('Translation error:', error);
-      alert('Translation failed. Please try again.');
+      addNotification('error', 'Translation Failed', error instanceof Error ? error.message : 'Unknown error');
     } finally {
       setIsProcessing(false);
     }
   };
 
-  const getDemoTranslation = (text: string, targetLang: string): string => {
-    const languagePrefixes: { [key: string]: string } = {
-      'es': 'Traducido al español: ',
-      'fr': 'Traduit en français: ',
-      'de': 'Ins Deutsche übersetzt: ',
-      'it': 'Tradotto in italiano: ',
-      'pt': 'Traduzido para português: ',
-      'ru': 'Переведено на русский: ',
-      'ja': '日本語に翻訳: ',
-      'ko': '한국어로 번역: ',
-      'zh': '翻译成中文: ',
-      'ar': 'مترجم إلى العربية: ',
-    };
-    
-    const prefix = languagePrefixes[targetLang] || '';
-    return prefix + text;
-  };
+
 
   const languages = [
     { code: 'es', name: 'Spanish' },
@@ -98,8 +139,86 @@ export default function Home() {
     { code: 'ar', name: 'Arabic' },
   ];
 
+  const handleChatSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!chatInput.trim() || isTyping) return;
+
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      type: 'user',
+      content: chatInput,
+      timestamp: new Date(),
+    };
+
+    setMessages(prev => [...prev, userMessage]);
+    setChatInput('');
+    setIsTyping(true);
+
+    try {
+      const response = await fetch('/api/translate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: chatInput,
+          language: targetLanguage,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown API error' }));
+        throw new Error(errorData.error || `API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      if (!data.success) {
+        throw new Error(data.error || 'Chat failed');
+      }
+
+      const assistantMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        type: 'assistant',
+        content: data.translation,
+        timestamp: new Date(),
+      };
+
+      setMessages(prev => [...prev, assistantMessage]);
+    } catch (error) {
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        type: 'assistant',
+        content: `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        timestamp: new Date(),
+        isError: true,
+      };
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
+      setIsTyping(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+      {/* Notifications */}
+      <div className="fixed top-4 right-4 z-50 space-y-2">
+        {notifications.map((notification) => (
+          <div
+            key={notification.id}
+            className={`p-4 rounded-lg shadow-lg max-w-sm ${
+              notification.type === 'success' ? 'bg-green-500 text-white' :
+              notification.type === 'error' ? 'bg-red-500 text-white' :
+              notification.type === 'warning' ? 'bg-yellow-500 text-white' :
+              'bg-blue-500 text-white'
+            }`}
+          >
+            <div className="font-semibold">{notification.title}</div>
+            <div className="text-sm opacity-90">{notification.message}</div>
+          </div>
+        ))}
+      </div>
+
       <div className="container mx-auto px-4 py-8">
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold text-gray-900 mb-4">
@@ -211,13 +330,71 @@ export default function Home() {
                 <MessageSquare className="mr-2 h-6 w-6 text-blue-600" />
                 AI Translation Assistant
               </h2>
-              <div className="bg-gray-50 rounded-lg p-4 h-64 overflow-y-auto">
-                <div className="text-gray-500 text-center">
-                  <MessageSquare className="mx-auto h-8 w-8 mb-2" />
-                  <p>AI chat interface coming soon...</p>
-                  <p className="text-sm">Ask questions about your translation, request style changes, or get context explanations.</p>
-                </div>
+              
+              {/* Chat Messages */}
+              <div className="bg-gray-50 rounded-lg p-4 h-64 overflow-y-auto mb-4">
+                {messages.length === 0 ? (
+                  <div className="text-gray-500 text-center">
+                    <MessageSquare className="mx-auto h-8 w-8 mb-2" />
+                    <p>Ask me anything about translation!</p>
+                    <p className="text-sm">I can help with translation questions, style guidance, and more.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {messages.map((message) => (
+                      <div
+                        key={message.id}
+                        className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
+                      >
+                        <div
+                          className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
+                            message.type === 'user'
+                              ? 'bg-blue-600 text-white'
+                              : message.isError
+                              ? 'bg-red-100 text-red-800'
+                              : 'bg-white text-gray-800 border border-gray-200'
+                          }`}
+                        >
+                          <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                          <p className="text-xs opacity-70 mt-1">
+                            {message.timestamp.toLocaleTimeString()}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                    {isTyping && (
+                      <div className="flex justify-start">
+                        <div className="bg-white text-gray-800 border border-gray-200 px-4 py-2 rounded-lg">
+                          <div className="flex space-x-1">
+                            <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                            <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                            <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
+
+              {/* Chat Input */}
+              <form onSubmit={handleChatSubmit} className="flex gap-2">
+                <input
+                  type="text"
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  placeholder="Ask about translation, request style changes..."
+                  className="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  disabled={isTyping}
+                />
+                <button
+                  type="submit"
+                  disabled={!chatInput.trim() || isTyping}
+                  className="px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ArrowRight className="h-4 w-4" />
+                </button>
+              </form>
             </div>
           )}
 

@@ -1,1 +1,10 @@
-This is a test document for translation. It contains sample text that should be processed and translated.
+This is a test document for the iterative translator.
+
+It contains multiple paragraphs to test the translation functionality.
+
+The document includes:
+- Simple text content
+- Multiple paragraphs
+- Basic formatting elements
+
+This should be sufficient to test the Word document processing and translation features of our application.
