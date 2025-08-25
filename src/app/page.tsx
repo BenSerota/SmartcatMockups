@@ -1,9 +1,24 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { Upload, FileText, Languages, ArrowRight, MessageSquare } from 'lucide-react';
-import DocumentPreview from '@/components/DocumentPreview';
+import { 
+  Home as HomeIcon, 
+  Briefcase, 
+  MessageSquare, 
+  FolderOpen, 
+  Grid3X3, 
+  HelpCircle,
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  Plus,
+  Mic,
+  Send,
+  FileText,
+  MoreHorizontal,
+  User
+} from 'lucide-react';
 import { processFile } from '@/utils/fileProcessor';
 
 interface TranslationResult {
@@ -20,6 +35,10 @@ interface Message {
   content: string;
   timestamp: Date;
   isError?: boolean;
+  file?: File;
+  fileName?: string;
+  isFileUpload?: boolean;
+  isTranslationRequest?: boolean;
 }
 
 interface Notification {
@@ -34,11 +53,13 @@ export default function Home() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [translationResult, setTranslationResult] = useState<TranslationResult | null>(null);
   const [targetLanguage, setTargetLanguage] = useState('es');
-  const [showChat, setShowChat] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [processingProgress, setProcessingProgress] = useState(0);
+  const [showDocumentView, setShowDocumentView] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
   const addNotification = (type: Notification['type'], title: string, message: string) => {
     const id = Date.now().toString();
@@ -48,11 +69,18 @@ export default function Home() {
     }, 5000);
   };
 
+  const scrollToBottom = () => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const uploadedFile = acceptedFiles[0];
     if (uploadedFile && uploadedFile.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-      setFile(uploadedFile);
-      setTranslationResult(null);
+      handleFileUpload(uploadedFile);
     } else {
       addNotification('error', 'Invalid File Type', 'Please upload a valid Word document (.docx)');
     }
@@ -66,10 +94,93 @@ export default function Home() {
     multiple: false
   });
 
+  const handleFileUpload = async (uploadedFile: File) => {
+    setFile(uploadedFile);
+    setTranslationResult(null);
+    setShowDocumentView(false);
+
+    // Add file upload message to chat
+    const fileMessage: Message = {
+      id: Date.now().toString(),
+      type: 'user',
+      content: `Uploaded: ${uploadedFile.name}`,
+      timestamp: new Date(),
+      file: uploadedFile,
+      fileName: uploadedFile.name,
+      isFileUpload: true
+    };
+
+    setMessages(prev => [...prev, fileMessage]);
+
+    // Simulate processing progress
+    setProcessingProgress(0);
+    const progressInterval = setInterval(() => {
+      setProcessingProgress(prev => {
+        if (prev >= 90) {
+          clearInterval(progressInterval);
+          return 90;
+        }
+        return prev + 10;
+      });
+    }, 200);
+
+    // Process the file
+    try {
+      const fileResult = await processFile(uploadedFile);
+      
+      if (!fileResult.success) {
+        addNotification('error', 'File Processing Failed', fileResult.error || 'Unknown error');
+        return;
+      }
+
+      setProcessingProgress(100);
+      clearInterval(progressInterval);
+
+      // Add processing complete message
+      const processingMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        type: 'assistant',
+        content: `Document processed successfully! I can help you translate this content. What language would you like to translate it to?`,
+        timestamp: new Date()
+      };
+
+      setMessages(prev => [...prev, processingMessage]);
+
+    } catch (error) {
+      clearInterval(progressInterval);
+      addNotification('error', 'File Processing Failed', error instanceof Error ? error.message : 'Unknown error');
+    }
+  };
+
   const handleTranslate = async () => {
     if (!file) return;
 
     setIsProcessing(true);
+    setIsTyping(true);
+
+    // Add translation request message
+    const languageNames: { [key: string]: string } = {
+      'es': 'Spanish',
+      'fr': 'French',
+      'de': 'German',
+      'it': 'Italian',
+      'pt': 'Portuguese',
+      'ru': 'Russian',
+      'ja': 'Japanese',
+      'ko': 'Korean',
+      'zh': 'Chinese',
+      'ar': 'Arabic'
+    };
+
+    const translationRequestMessage: Message = {
+      id: Date.now().toString(),
+      type: 'user',
+      content: `Translate from English to ${languageNames[targetLanguage]}`,
+      timestamp: new Date(),
+      isTranslationRequest: true
+    };
+
+    setMessages(prev => [...prev, translationRequestMessage]);
 
     try {
       // Step 1: Process the file using the proper file processor
@@ -108,36 +219,42 @@ export default function Home() {
       // Step 3: Format the results
       setTranslationResult({
         sourceText: fileResult.content,
-        sourceHtml: `<div style="white-space: pre-wrap;">${fileResult.content}</div>`,
+        sourceHtml: `<div style="white-space: pre-wrap; font-family: 'Inter', sans-serif; line-height: 1.6;">${fileResult.content}</div>`,
         translatedText: data.translation,
-        translatedHtml: `<div style="white-space: pre-wrap;">${data.translation}</div>`,
+        translatedHtml: `<div style="white-space: pre-wrap; font-family: 'Inter', sans-serif; line-height: 1.6;">${data.translation}</div>`,
         targetLanguage,
       });
 
-      addNotification('success', 'Translation Complete', `Successfully translated to ${languages.find(l => l.code === targetLanguage)?.name}`);
+      // Add translation complete message
+      const translationCompleteMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        type: 'assistant',
+        content: `Translation complete! I've translated your document to ${languageNames[targetLanguage]}. You can view the side-by-side comparison on the right.`,
+        timestamp: new Date()
+      };
+
+      setMessages(prev => [...prev, translationCompleteMessage]);
+      setShowDocumentView(true);
+
+      addNotification('success', 'Translation Complete', `Successfully translated to ${languageNames[targetLanguage]}`);
 
     } catch (error) {
       console.error('Translation error:', error);
       addNotification('error', 'Translation Failed', error instanceof Error ? error.message : 'Unknown error');
+      
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        type: 'assistant',
+        content: `❌ Translation failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        timestamp: new Date(),
+        isError: true
+      };
+      setMessages(prev => [...prev, errorMessage]);
     } finally {
       setIsProcessing(false);
+      setIsTyping(false);
     }
   };
-
-
-
-  const languages = [
-    { code: 'es', name: 'Spanish' },
-    { code: 'fr', name: 'French' },
-    { code: 'de', name: 'German' },
-    { code: 'it', name: 'Italian' },
-    { code: 'pt', name: 'Portuguese' },
-    { code: 'ru', name: 'Russian' },
-    { code: 'ja', name: 'Japanese' },
-    { code: 'ko', name: 'Korean' },
-    { code: 'zh', name: 'Chinese' },
-    { code: 'ar', name: 'Arabic' },
-  ];
 
   const handleChatSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -153,6 +270,32 @@ export default function Home() {
     setMessages(prev => [...prev, userMessage]);
     setChatInput('');
     setIsTyping(true);
+
+    // Check if this is a translation request
+    const translationMatch = chatInput.toLowerCase().match(/translate.*to\s+(\w+)/);
+    if (translationMatch && file) {
+      const requestedLanguage = translationMatch[1];
+      const languageMap: { [key: string]: string } = {
+        'spanish': 'es',
+        'french': 'fr',
+        'german': 'de',
+        'italian': 'it',
+        'portuguese': 'pt',
+        'russian': 'ru',
+        'japanese': 'ja',
+        'korean': 'ko',
+        'chinese': 'zh',
+        'arabic': 'ar'
+      };
+      
+      const languageCode = languageMap[requestedLanguage];
+      if (languageCode) {
+        setTargetLanguage(languageCode);
+        // Trigger translation
+        setTimeout(() => handleTranslate(), 100);
+        return;
+      }
+    }
 
     try {
       const response = await fetch('/api/translate', {
@@ -199,8 +342,21 @@ export default function Home() {
     }
   };
 
+  const languages = [
+    { code: 'es', name: 'Spanish' },
+    { code: 'fr', name: 'French' },
+    { code: 'de', name: 'German' },
+    { code: 'it', name: 'Italian' },
+    { code: 'pt', name: 'Portuguese' },
+    { code: 'ru', name: 'Russian' },
+    { code: 'ja', name: 'Japanese' },
+    { code: 'ko', name: 'Korean' },
+    { code: 'zh', name: 'Chinese' },
+    { code: 'ar', name: 'Arabic' },
+  ];
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+    <div className="min-h-screen bg-gray-50 flex">
       {/* Notifications */}
       <div className="fixed top-4 right-4 z-50 space-y-2">
         {notifications.map((notification) => (
@@ -219,217 +375,240 @@ export default function Home() {
         ))}
       </div>
 
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-gray-900 mb-4">
-            Next-Gen Smartcat
-          </h1>
-          <p className="text-lg text-gray-600 mb-4">
-            AI Chat-First Translation Platform
-          </p>
-          <div className="flex items-center justify-center gap-4">
-            <button
-              onClick={() => setShowChat(!showChat)}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                showChat 
-                  ? 'bg-blue-600 text-white' 
-                  : 'bg-white text-gray-700 hover:bg-gray-50'
-              }`}
-            >
-              <MessageSquare className="inline mr-2 h-4 w-4" />
-              AI Chat Mode
-            </button>
+      {/* Left Sidebar */}
+      <div className="w-16 bg-gray-900 flex flex-col items-center py-6 space-y-6">
+        {/* Smartcat Logo */}
+        <div className="flex flex-col items-center space-y-2">
+          <div className="w-8 h-8 bg-red-500 rounded flex items-center justify-center text-white font-bold text-sm">
+            A
+          </div>
+          <div className="w-8 h-8 bg-black rounded flex items-center justify-center text-white font-bold text-xs">
+            SC
           </div>
         </div>
 
-        <div className="max-w-6xl mx-auto">
-          {/* File Upload Section */}
-          <div className="bg-white rounded-lg shadow-lg p-8 mb-8">
-            <div className="mb-6">
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4 flex items-center">
-                <FileText className="mr-2 h-6 w-6 text-blue-600" />
-                Upload Document
-              </h2>
-              
-              <div
-                {...getRootProps()}
-                className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
-                  isDragActive
-                    ? 'border-blue-500 bg-blue-50'
-                    : 'border-gray-300 hover:border-blue-400 hover:bg-gray-50'
-                }`}
-              >
-                <input {...getInputProps()} />
-                <Upload className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-                {isDragActive ? (
-                  <p className="text-blue-600">Drop the Word document here...</p>
-                ) : (
-                  <div>
-                    <p className="text-gray-600 mb-2">
-                      Drag and drop a Word document here, or click to select
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      Supports .docx files only
-                    </p>
-                  </div>
-                )}
+        {/* Navigation */}
+        <nav className="flex flex-col space-y-4">
+                     <button className="w-10 h-10 rounded-lg flex items-center justify-center text-gray-400 hover:text-white hover:bg-gray-800 transition-colors">
+             <HomeIcon className="w-5 h-5" />
+           </button>
+                     <button className="w-10 h-10 rounded-lg flex items-center justify-center text-gray-400 hover:text-white hover:bg-gray-800 transition-colors">
+             <Briefcase className="w-5 h-5" />
+           </button>
+          <button className="w-10 h-10 rounded-lg flex items-center justify-center text-white bg-blue-600 rounded-lg">
+            <MessageSquare className="w-5 h-5" />
+          </button>
+          <button className="w-10 h-10 rounded-lg flex items-center justify-center text-gray-400 hover:text-white hover:bg-gray-800 transition-colors">
+            <FolderOpen className="w-5 h-5" />
+          </button>
+          <button className="w-10 h-10 rounded-lg flex items-center justify-center text-gray-400 hover:text-white hover:bg-gray-800 transition-colors">
+            <Grid3X3 className="w-5 h-5" />
+          </button>
+          <button className="w-10 h-10 rounded-lg flex items-center justify-center text-gray-400 hover:text-white hover:bg-gray-800 transition-colors">
+            <HelpCircle className="w-5 h-5" />
+          </button>
+        </nav>
+
+        {/* User Profile */}
+        <div className="mt-auto">
+          <div className="w-10 h-10 bg-purple-500 rounded-full flex items-center justify-center text-white font-semibold">
+            <User className="w-5 h-5" />
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="flex-1 flex">
+        {/* Left Panel - Chat Interface */}
+        <div className="w-1/2 bg-white border-r border-gray-200 flex flex-col">
+          {/* Chat Header */}
+          <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="w-8 h-8 bg-black rounded flex items-center justify-center text-white font-bold text-xs">
+                SC
               </div>
-
-              {file && (
-                <div className="mt-4 p-4 bg-green-50 rounded-lg">
-                  <p className="text-green-800">
-                    <strong>Selected file:</strong> {file.name}
-                  </p>
-                </div>
-              )}
+              <div>
+                <h1 className="font-semibold text-gray-900">Smartcat</h1>
+                <p className="text-sm text-gray-500">I'm here to help</p>
+              </div>
             </div>
-
-            {/* Language Selection */}
-            <div className="mb-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center">
-                <Languages className="mr-2 h-5 w-5 text-blue-600" />
-                Target Language
-              </h3>
-              <select
-                value={targetLanguage}
-                onChange={(e) => setTargetLanguage(e.target.value)}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                {languages.map((lang) => (
-                  <option key={lang.code} value={lang.code}>
-                    {lang.name}
-                  </option>
-                ))}
-              </select>
+            <div className="flex items-center space-x-2">
+              <button className="p-2 rounded-lg hover:bg-gray-100">
+                <FileText className="w-5 h-5 text-gray-500" />
+              </button>
+              <button className="p-2 rounded-lg hover:bg-gray-100">
+                <MoreHorizontal className="w-5 h-5 text-gray-500" />
+              </button>
             </div>
-
-            {/* Translate Button */}
-            <button
-              onClick={handleTranslate}
-              disabled={!file || isProcessing}
-              className="w-full bg-blue-600 text-white py-3 px-6 rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
-            >
-              {isProcessing ? (
-                <div className="flex items-center">
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                  Translating...
-                </div>
-              ) : (
-                <>
-                  <ArrowRight className="mr-2 h-5 w-5" />
-                  Translate Document
-                </>
-              )}
-            </button>
           </div>
 
-          {/* AI Chat Interface */}
-          {showChat && (
-            <div className="bg-white rounded-lg shadow-lg p-8 mb-8">
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4 flex items-center">
-                <MessageSquare className="mr-2 h-6 w-6 text-blue-600" />
-                AI Translation Assistant
-              </h2>
-              
-              {/* Chat Messages */}
-              <div className="bg-gray-50 rounded-lg p-4 h-64 overflow-y-auto mb-4">
-                {messages.length === 0 ? (
-                  <div className="text-gray-500 text-center">
-                    <MessageSquare className="mx-auto h-8 w-8 mb-2" />
-                    <p>Ask me anything about translation!</p>
-                    <p className="text-sm">I can help with translation questions, style guidance, and more.</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {messages.map((message) => (
-                      <div
-                        key={message.id}
-                        className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
-                      >
-                        <div
-                          className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
-                            message.type === 'user'
-                              ? 'bg-blue-600 text-white'
-                              : message.isError
-                              ? 'bg-red-100 text-red-800'
-                              : 'bg-white text-gray-800 border border-gray-200'
-                          }`}
-                        >
-                          <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-                          <p className="text-xs opacity-70 mt-1">
-                            {message.timestamp.toLocaleTimeString()}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                    {isTyping && (
-                      <div className="flex justify-start">
-                        <div className="bg-white text-gray-800 border border-gray-200 px-4 py-2 rounded-lg">
-                          <div className="flex space-x-1">
-                            <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                            <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                            <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                          </div>
-                        </div>
+          {/* Chat Messages */}
+          <div className="flex-1 overflow-y-auto p-6 space-y-4">
+            {messages.length === 0 ? (
+              <div className="text-center text-gray-500 mt-8">
+                <MessageSquare className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                <p className="text-lg font-medium">Welcome to Smartcat!</p>
+                <p className="text-sm">Upload a document to get started with translation.</p>
+              </div>
+            ) : (
+              messages.map((message) => (
+                <div
+                  key={message.id}
+                  className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
+                >
+                  <div
+                    className={`max-w-xs lg:max-w-md px-4 py-3 rounded-lg ${
+                      message.type === 'user'
+                        ? 'bg-blue-600 text-white'
+                        : message.isError
+                        ? 'bg-red-100 text-red-800'
+                        : 'bg-gray-100 text-gray-800'
+                    }`}
+                  >
+                    {message.isFileUpload && (
+                      <div className="flex items-center space-x-2 mb-2">
+                        <FileText className="w-4 h-4" />
+                        <span className="text-sm font-medium">{message.fileName}</span>
                       </div>
                     )}
+                    {message.isTranslationRequest && (
+                      <div className="flex items-center space-x-2 mb-2">
+                        <span className="text-sm font-medium">Translation Request</span>
+                      </div>
+                    )}
+                    <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                    <p className="text-xs opacity-70 mt-2">
+                      {message.timestamp.toLocaleTimeString()}
+                    </p>
                   </div>
-                )}
+                </div>
+              ))
+            )}
+            
+            {/* Processing Progress */}
+            {isProcessing && (
+              <div className="flex justify-start">
+                <div className="bg-gray-100 text-gray-800 px-4 py-3 rounded-lg max-w-md">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                    <span className="text-sm font-medium">Processing document...</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div 
+                      className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                      style={{ width: `${processingProgress}%` }}
+                    ></div>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">{processingProgress}% complete</p>
+                </div>
+              </div>
+            )}
+
+            {/* Typing Indicator */}
+            {isTyping && !isProcessing && (
+              <div className="flex justify-start">
+                <div className="bg-gray-100 text-gray-800 px-4 py-3 rounded-lg">
+                  <div className="flex space-x-1">
+                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div ref={chatEndRef} />
+          </div>
+
+          {/* Chat Input */}
+          <div className="p-6 border-t border-gray-200">
+            <form onSubmit={handleChatSubmit} className="flex items-center space-x-3">
+              <button
+                type="button"
+                {...getRootProps()}
+                className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                <Plus className="w-5 h-5 text-gray-500" />
+              </button>
+              <input
+                type="text"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                placeholder="Ask me anything..."
+                className="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                disabled={isTyping}
+              />
+              <button
+                type="button"
+                className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                <Mic className="w-5 h-5 text-gray-500" />
+              </button>
+              <button
+                type="submit"
+                disabled={!chatInput.trim() || isTyping}
+                className="p-3 bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+              >
+                <Send className="w-4 h-4" />
+              </button>
+            </form>
+          </div>
+        </div>
+
+        {/* Right Panel - Document View */}
+        <div className="w-1/2 bg-white flex flex-col">
+          {!showDocumentView ? (
+            <div className="flex-1 flex items-center justify-center">
+              <div className="text-center text-gray-500">
+                <FileText className="w-16 h-16 mx-auto mb-4 text-gray-300" />
+                <p className="text-lg font-medium">Document Preview</p>
+                <p className="text-sm">Upload a document and translate it to see the side-by-side comparison.</p>
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* Document Header */}
+              <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+                <div className="flex items-center space-x-4">
+                  <div className="flex items-center space-x-2">
+                    <span className="text-sm font-medium text-gray-700">Original: English (USA)</span>
+                    <ChevronLeft className="w-4 h-4 text-gray-400" />
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-sm font-medium text-gray-700">Translation: {languages.find(l => l.code === targetLanguage)?.name} (2)</span>
+                    <ChevronRight className="w-4 h-4 text-gray-400" />
+                  </div>
+                </div>
+                <button className="flex items-center space-x-2 px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700 transition-colors">
+                  <Download className="w-4 h-4" />
+                  <span className="text-sm">Download PDFs</span>
+                </button>
               </div>
 
-              {/* Chat Input */}
-              <form onSubmit={handleChatSubmit} className="flex gap-2">
-                <input
-                  type="text"
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
-                  placeholder="Ask about translation, request style changes..."
-                  className="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  disabled={isTyping}
-                />
-                <button
-                  type="submit"
-                  disabled={!chatInput.trim() || isTyping}
-                  className="px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-                >
-                  <ArrowRight className="h-4 w-4" />
-                </button>
-              </form>
-            </div>
-          )}
-
-          {/* Enhanced Document Preview */}
-          {translationResult && (
-            <div className="bg-white rounded-lg shadow-lg p-8">
-              <h2 className="text-2xl font-semibold text-gray-900 mb-6">
-                Document Preview
-              </h2>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Source Document */}
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-3">
-                    Original Document
-                  </h3>
-                  <DocumentPreview
-                    htmlContent={translationResult.sourceHtml}
-                    title="Source Document"
-                    className="h-96"
+              {/* Document Content */}
+              <div className="flex-1 flex">
+                {/* Original Document */}
+                <div className="w-1/2 border-r border-gray-200 p-6 overflow-y-auto">
+                  <div 
+                    className="max-w-none"
+                    dangerouslySetInnerHTML={{ __html: translationResult?.sourceHtml || '' }}
                   />
                 </div>
 
                 {/* Translated Document */}
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-3">
-                    Translated Document ({languages.find(l => l.code === translationResult.targetLanguage)?.name})
-                  </h3>
-                  <DocumentPreview
-                    htmlContent={translationResult.translatedHtml}
-                    title="Translated Document"
-                    className="h-96"
+                <div className="w-1/2 p-6 overflow-y-auto">
+                  <div 
+                    className="max-w-none"
+                    dangerouslySetInnerHTML={{ __html: translationResult?.translatedHtml || '' }}
                   />
                 </div>
               </div>
-            </div>
+
+              {/* Page Navigation */}
+              <div className="p-4 border-t border-gray-200 flex items-center justify-center">
+                <span className="text-sm text-gray-500">Page 1</span>
+              </div>
+            </>
           )}
         </div>
       </div>
