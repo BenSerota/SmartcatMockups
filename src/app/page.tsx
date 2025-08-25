@@ -17,7 +17,11 @@ import {
   Send,
   FileText,
   MoreHorizontal,
-  User
+  User,
+  Video,
+  Image,
+  FileText as FileTextIcon,
+  Code
 } from 'lucide-react';
 import { processFile } from '@/utils/fileProcessor';
 
@@ -59,6 +63,7 @@ export default function Home() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [processingProgress, setProcessingProgress] = useState(0);
   const [showDocumentView, setShowDocumentView] = useState(false);
+  const [showChatInterface, setShowChatInterface] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   const addNotification = (type: Notification['type'], title: string, message: string) => {
@@ -78,10 +83,13 @@ export default function Home() {
   }, [messages]);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
+    console.log('onDrop called with files:', acceptedFiles);
     const uploadedFile = acceptedFiles[0];
     if (uploadedFile && uploadedFile.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+      console.log('Valid Word document detected:', uploadedFile.name);
       handleFileUpload(uploadedFile);
     } else {
+      console.log('Invalid file type:', uploadedFile?.type);
       addNotification('error', 'Invalid File Type', 'Please upload a valid Word document (.docx)');
     }
   }, []);
@@ -98,6 +106,7 @@ export default function Home() {
     setFile(uploadedFile);
     setTranslationResult(null);
     setShowDocumentView(false);
+    setShowChatInterface(true);
 
     // Add file upload message to chat
     const fileMessage: Message = {
@@ -389,12 +398,12 @@ export default function Home() {
 
         {/* Navigation */}
         <nav className="flex flex-col space-y-4">
-                     <button className="w-10 h-10 rounded-lg flex items-center justify-center text-gray-400 hover:text-white hover:bg-gray-800 transition-colors">
-             <HomeIcon className="w-5 h-5" />
-           </button>
-                     <button className="w-10 h-10 rounded-lg flex items-center justify-center text-gray-400 hover:text-white hover:bg-gray-800 transition-colors">
-             <Briefcase className="w-5 h-5" />
-           </button>
+          <button className="w-10 h-10 rounded-lg flex items-center justify-center text-gray-400 hover:text-white hover:bg-gray-800 transition-colors">
+            <HomeIcon className="w-5 h-5" />
+          </button>
+          <button className="w-10 h-10 rounded-lg flex items-center justify-center text-gray-400 hover:text-white hover:bg-gray-800 transition-colors">
+            <Briefcase className="w-5 h-5" />
+          </button>
           <button className="w-10 h-10 rounded-lg flex items-center justify-center text-white bg-blue-600 rounded-lg">
             <MessageSquare className="w-5 h-5" />
           </button>
@@ -419,140 +428,260 @@ export default function Home() {
 
       {/* Main Content */}
       <div className="flex-1 flex">
-        {/* Left Panel - Chat Interface */}
+        {/* Left Panel - Chat Interface or Welcome Page */}
         <div className="w-1/2 bg-white border-r border-gray-200 flex flex-col">
-          {/* Chat Header */}
-          <div className="p-6 border-b border-gray-200 flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <div className="w-8 h-8 bg-black rounded flex items-center justify-center text-white font-bold text-xs">
-                SC
+          {!showChatInterface ? (
+            // Welcome Page
+            <div 
+              {...getRootProps()}
+              className={`flex-1 flex flex-col items-center justify-center p-8 ${
+                isDragActive ? 'bg-blue-50 border-2 border-blue-300 border-dashed' : ''
+              }`}
+            >
+              <input {...getInputProps()} />
+              {/* Top Bar */}
+              <div className="absolute top-4 right-4 flex items-center space-x-4">
+                <div className="flex items-center space-x-2 bg-purple-100 px-3 py-1 rounded-full">
+                  <span className="text-purple-600 font-semibold">60,053</span>
+                </div>
+                <button className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
+                  <HelpCircle className="w-4 h-4 text-gray-600" />
+                </button>
               </div>
-              <div>
-                <h1 className="font-semibold text-gray-900">Smartcat</h1>
-                <p className="text-sm text-gray-500">I'm here to help</p>
+
+              {/* Main Content */}
+              <div className="text-center max-w-2xl">
+                <h1 className="text-4xl font-serif text-gray-900 mb-8">
+                  What's on your mind today, Ben?
+                </h1>
+                {isDragActive && (
+                  <div className="mb-8 p-4 bg-blue-100 border-2 border-blue-300 rounded-lg">
+                    <p className="text-blue-700 font-medium">Drop your Word document here to get started!</p>
+                  </div>
+                )}
+                <p className="text-sm text-gray-500 mb-8">💡 Tip: You can drag and drop a Word document anywhere on this page, or click to select a file</p>
+                
+                {/* Main Input */}
+                <div className="mb-8">
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="How do I work with media files?"
+                      className="w-full p-4 pr-12 border border-gray-300 rounded-xl text-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                    <button className="absolute right-2 top-2 w-10 h-10 bg-black text-white rounded-full flex items-center justify-center">
+                      <Send className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Suggested Actions */}
+                <div className="grid grid-cols-2 gap-4 mb-12">
+                  <button className="p-4 bg-blue-500 text-white rounded-xl flex items-center space-x-3 hover:bg-blue-600 transition-colors">
+                    <Video className="w-5 h-5" />
+                    <span>How do I work with media files?</span>
+                  </button>
+                  <button className="p-4 bg-orange-500 text-white rounded-xl flex items-center space-x-3 hover:bg-orange-600 transition-colors">
+                    <Image className="w-5 h-5" />
+                    <span>How do I translate images?</span>
+                  </button>
+                  <button className="p-4 bg-red-500 text-white rounded-xl flex items-center space-x-3 hover:bg-red-600 transition-colors">
+                    <FileTextIcon className="w-5 h-5" />
+                    <span>How do I translate PDFs?</span>
+                  </button>
+                  <button className="p-4 bg-green-500 text-white rounded-xl flex items-center space-x-3 hover:bg-green-600 transition-colors">
+                    <Code className="w-5 h-5" />
+                    <span>How do I translate courses?</span>
+                  </button>
+                </div>
+
+                {/* Agent Team Section */}
+                <div className="text-left">
+                  <div className="flex items-center justify-between mb-6">
+                    <h2 className="text-2xl font-serif text-gray-900">Meet your agent team</h2>
+                    <div className="flex items-center space-x-2">
+                      <button className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
+                        <Plus className="w-4 h-4 text-gray-600" />
+                      </button>
+                      <button className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg flex items-center space-x-2">
+                        <User className="w-4 h-4" />
+                        <span>Agent Library</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Tabs */}
+                  <div className="flex space-x-6 mb-6">
+                    <button className="text-blue-600 border-b-2 border-blue-600 pb-2 font-medium">Recents 3</button>
+                    <button className="text-gray-500 hover:text-gray-700">Recommended 10</button>
+                    <button className="text-gray-500 hover:text-gray-700">Custom 5</button>
+                    <button className="text-gray-500 hover:text-gray-700">Integrations 1</button>
+                  </div>
+
+                  {/* Agent Cards */}
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="p-4 border border-gray-200 rounded-xl hover:shadow-md transition-shadow">
+                      <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-3">
+                        <FileText className="w-6 h-6 text-blue-600" />
+                      </div>
+                      <h3 className="font-semibold text-gray-900 mb-1">Document Translator</h3>
+                      <p className="text-sm text-gray-500">Translates documents while preserving formatting</p>
+                    </div>
+                    <div className="p-4 border border-gray-200 rounded-xl hover:shadow-md transition-shadow">
+                      <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mb-3">
+                        <Video className="w-6 h-6 text-green-600" />
+                      </div>
+                      <h3 className="font-semibold text-gray-900 mb-1">Media Translator</h3>
+                      <p className="text-sm text-gray-500">Handles video and audio translation</p>
+                    </div>
+                    <div className="p-4 border border-gray-200 rounded-xl hover:shadow-md transition-shadow">
+                      <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mb-3">
+                        <Code className="w-6 h-6 text-purple-600" />
+                      </div>
+                      <h3 className="font-semibold text-gray-900 mb-1">Course Translator</h3>
+                      <p className="text-sm text-gray-500">Specialized in educational content</p>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
-            <div className="flex items-center space-x-2">
-              <button className="p-2 rounded-lg hover:bg-gray-100">
-                <FileText className="w-5 h-5 text-gray-500" />
-              </button>
-              <button className="p-2 rounded-lg hover:bg-gray-100">
-                <MoreHorizontal className="w-5 h-5 text-gray-500" />
-              </button>
-            </div>
-          </div>
-
-          {/* Chat Messages */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-4">
-            {messages.length === 0 ? (
-              <div className="text-center text-gray-500 mt-8">
-                <MessageSquare className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                <p className="text-lg font-medium">Welcome to Smartcat!</p>
-                <p className="text-sm">Upload a document to get started with translation.</p>
-              </div>
-            ) : (
-              messages.map((message) => (
-                <div
-                  key={message.id}
-                  className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
-                >
-                  <div
-                    className={`max-w-xs lg:max-w-md px-4 py-3 rounded-lg ${
-                      message.type === 'user'
-                        ? 'bg-blue-600 text-white'
-                        : message.isError
-                        ? 'bg-red-100 text-red-800'
-                        : 'bg-gray-100 text-gray-800'
-                    }`}
-                  >
-                    {message.isFileUpload && (
-                      <div className="flex items-center space-x-2 mb-2">
-                        <FileText className="w-4 h-4" />
-                        <span className="text-sm font-medium">{message.fileName}</span>
-                      </div>
-                    )}
-                    {message.isTranslationRequest && (
-                      <div className="flex items-center space-x-2 mb-2">
-                        <span className="text-sm font-medium">Translation Request</span>
-                      </div>
-                    )}
-                    <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-                    <p className="text-xs opacity-70 mt-2">
-                      {message.timestamp.toLocaleTimeString()}
-                    </p>
+          ) : (
+            // Chat Interface
+            <>
+              {/* Chat Header */}
+              <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="w-8 h-8 bg-black rounded flex items-center justify-center text-white font-bold text-xs">
+                    SC
+                  </div>
+                  <div>
+                    <h1 className="font-semibold text-gray-900">Smartcat</h1>
+                    <p className="text-sm text-gray-500">I'm here to help</p>
                   </div>
                 </div>
-              ))
-            )}
-            
-            {/* Processing Progress */}
-            {isProcessing && (
-              <div className="flex justify-start">
-                <div className="bg-gray-100 text-gray-800 px-4 py-3 rounded-lg max-w-md">
-                  <div className="flex items-center space-x-2 mb-2">
-                    <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
-                    <span className="text-sm font-medium">Processing document...</span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div 
-                      className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-                      style={{ width: `${processingProgress}%` }}
-                    ></div>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1">{processingProgress}% complete</p>
+                <div className="flex items-center space-x-2">
+                  <button className="p-2 rounded-lg hover:bg-gray-100">
+                    <FileText className="w-5 h-5 text-gray-500" />
+                  </button>
+                  <button className="p-2 rounded-lg hover:bg-gray-100">
+                    <MoreHorizontal className="w-5 h-5 text-gray-500" />
+                  </button>
                 </div>
               </div>
-            )}
 
-            {/* Typing Indicator */}
-            {isTyping && !isProcessing && (
-              <div className="flex justify-start">
-                <div className="bg-gray-100 text-gray-800 px-4 py-3 rounded-lg">
-                  <div className="flex space-x-1">
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div ref={chatEndRef} />
-          </div>
-
-          {/* Chat Input */}
-          <div className="p-6 border-t border-gray-200">
-            <form onSubmit={handleChatSubmit} className="flex items-center space-x-3">
-              <button
-                type="button"
+              {/* Chat Messages - Entire area is droppable */}
+              <div 
                 {...getRootProps()}
-                className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                className={`flex-1 overflow-y-auto p-6 space-y-4 ${
+                  isDragActive ? 'bg-blue-50 border-2 border-blue-300 border-dashed' : ''
+                }`}
               >
-                <Plus className="w-5 h-5 text-gray-500" />
-              </button>
-              <input
-                type="text"
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                placeholder="Ask me anything..."
-                className="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                disabled={isTyping}
-              />
-              <button
-                type="button"
-                className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
-              >
-                <Mic className="w-5 h-5 text-gray-500" />
-              </button>
-              <button
-                type="submit"
-                disabled={!chatInput.trim() || isTyping}
-                className="p-3 bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-              >
-                <Send className="w-4 h-4" />
-              </button>
-            </form>
-          </div>
+                <input {...getInputProps()} />
+                
+                {messages.length === 0 ? (
+                  <div className="text-center text-gray-500 mt-8">
+                    <MessageSquare className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                    <p className="text-lg font-medium">Welcome to Smartcat!</p>
+                    <p className="text-sm">Drop a Word document here or type a message to get started.</p>
+                  </div>
+                ) : (
+                  messages.map((message) => (
+                    <div
+                      key={message.id}
+                      className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
+                    >
+                      <div
+                        className={`max-w-xs lg:max-w-md px-4 py-3 rounded-lg ${
+                          message.type === 'user'
+                            ? 'bg-blue-600 text-white'
+                            : message.isError
+                            ? 'bg-red-100 text-red-800'
+                            : 'bg-gray-100 text-gray-800'
+                        }`}
+                      >
+                        {message.isFileUpload && (
+                          <div className="flex items-center space-x-2 mb-2">
+                            <FileText className="w-4 h-4" />
+                            <span className="text-sm font-medium">{message.fileName}</span>
+                          </div>
+                        )}
+                        {message.isTranslationRequest && (
+                          <div className="flex items-center space-x-2 mb-2">
+                            <span className="text-sm font-medium">Translation Request</span>
+                          </div>
+                        )}
+                        <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                        <p className="text-xs opacity-70 mt-2">
+                          {message.timestamp.toLocaleTimeString()}
+                        </p>
+                      </div>
+                    </div>
+                  ))
+                )}
+                
+                {/* Processing Progress */}
+                {isProcessing && (
+                  <div className="flex justify-start">
+                    <div className="bg-gray-100 text-gray-800 px-4 py-3 rounded-lg max-w-md">
+                      <div className="flex items-center space-x-2 mb-2">
+                        <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                        <span className="text-sm font-medium">Processing document...</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div 
+                          className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                          style={{ width: `${processingProgress}%` }}
+                        ></div>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">{processingProgress}% complete</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Typing Indicator */}
+                {isTyping && !isProcessing && (
+                  <div className="flex justify-start">
+                    <div className="bg-gray-100 text-gray-800 px-4 py-3 rounded-lg">
+                      <div className="flex space-x-1">
+                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div ref={chatEndRef} />
+              </div>
+
+              {/* Chat Input */}
+              <div className="p-6 border-t border-gray-200">
+                <form onSubmit={handleChatSubmit} className="flex items-center space-x-3">
+                  <input
+                    type="text"
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    placeholder="Ask me anything..."
+                    className="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    disabled={isTyping}
+                  />
+                  <button
+                    type="button"
+                    className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                  >
+                    <Mic className="w-5 h-5 text-gray-500" />
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!chatInput.trim() || isTyping}
+                    className="p-3 bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <Send className="w-4 h-4" />
+                  </button>
+                </form>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Right Panel - Document View */}
